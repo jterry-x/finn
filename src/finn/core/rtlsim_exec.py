@@ -79,7 +79,7 @@ def rtlsim_exec(model, execution_context, batchsize=1):
     targetBits = o_dt.bitwidth()
     # pack input
     packed_input = npy_to_rtlsim_input(i_tensor, i_dt, i_stream_w)
-    num_out_values = last_node.get_number_output_values()
+    num_out_values = last_node.get_number_output_values() * batchsize
     # prepare pyverilator model
     rtlsim_so = model.get_metadata_prop("rtlsim_so")
     if (rtlsim_so is None) or (not os.path.isfile(rtlsim_so)):
