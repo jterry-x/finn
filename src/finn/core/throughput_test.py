@@ -29,52 +29,80 @@
 import os
 import subprocess
 
+from finn.util.basic import gen_finn_dt_tensor
+from finn.core.rtlsim_exec import rtlsim_exec
 
-def throughput_test(model):
-    """Runs the throughput test for the given model remotely on the pynq board.
-    The metadata properties related to the pynq board have to be set.
+
+def throughput_test(model, mode):
+    """Depending on "mode" argument either runs the throughput test for
+    the given model using PyVerilator on the stitched IP or remotely on
+    the pynq board. If the test should be run on a board, the metadata
+    properties related to the pynq board have to be set.
     Returns a dictionary with results of the throughput test"""
 
-    pynq_ip = model.get_metadata_prop("pynq_ip")
-    pynq_port = int(model.get_metadata_prop("pynq_port"))
-    pynq_username = model.get_metadata_prop("pynq_username")
-    pynq_password = model.get_metadata_prop("pynq_password")
-    pynq_target_dir = model.get_metadata_prop("pynq_target_dir")
-    deployment_dir = model.get_metadata_prop("pynq_deploy_dir")
-    # extracting last folder of absolute path (deployment_dir)
-    deployment_folder = os.path.basename(os.path.normpath(deployment_dir))
+    batchsize = 1000
+    if mode == "board":
+        pynq_ip = model.get_metadata_prop("pynq_ip")
+        pynq_port = int(model.get_metadata_prop("pynq_port"))
+        pynq_username = model.get_metadata_prop("pynq_username")
+        pynq_password = model.get_metadata_prop("pynq_password")
+        pynq_target_dir = model.get_metadata_prop("pynq_target_dir")
+        deployment_dir = model.get_metadata_prop("pynq_deploy_dir")
+        # extracting last folder of absolute path (deployment_dir)
+        deployment_folder = os.path.basename(os.path.normpath(deployment_dir))
 
-    cmd = (
-        "sshpass -p {} ssh {}@{} -p {} "
-        '"cd {}/{}; echo "{}" | '
-        'sudo -S python3.6 driver.py --exec_mode="throughput_test" --batchsize=1000"'
-    ).format(
-        pynq_password,
-        pynq_username,
-        pynq_ip,
-        pynq_port,
-        pynq_target_dir,
-        deployment_folder,
-        pynq_password,
-    )
-    bash_command = ["/bin/bash", "-c", cmd]
-    process_compile = subprocess.Popen(bash_command, stdout=subprocess.PIPE)
-    process_compile.communicate()
+        cmd = (
+            "sshpass -p {} ssh {}@{} -p {} "
+            '"cd {}/{}; echo "{}" | '
+            'sudo -S python3.6 driver.py --exec_mode="throughput_test" '
+            '--batchsize={}"'
+        ).format(
+            pynq_password,
+            pynq_username,
+            pynq_ip,
+            pynq_port,
+            pynq_target_dir,
+            deployment_folder,
+            pynq_password,
+            batchsize,
+        )
+        bash_command = ["/bin/bash", "-c", cmd]
+        process_compile = subprocess.Popen(bash_command, stdout=subprocess.PIPE)
+        process_compile.communicate()
 
-    cmd = "sshpass -p {} scp -P{} {}@{}:{}/{}/nw_metrics.txt {}".format(
-        pynq_password,
-        pynq_port,
-        pynq_username,
-        pynq_ip,
-        pynq_target_dir,
-        deployment_folder,
-        deployment_dir,
-    )
-    bash_command = ["/bin/bash", "-c", cmd]
-    process_compile = subprocess.Popen(bash_command, stdout=subprocess.PIPE)
-    process_compile.communicate()
+        cmd = "sshpass -p {} scp -P{} {}@{}:{}/{}/nw_metrics.txt {}".format(
+            pynq_password,
+            pynq_port,
+            pynq_username,
+            pynq_ip,
+            pynq_target_dir,
+            deployment_folder,
+            deployment_dir,
+        )
+        bash_command = ["/bin/bash", "-c", cmd]
+        process_compile = subprocess.Popen(bash_command, stdout=subprocess.PIPE)
+        process_compile.communicate()
 
-    with open("{}/nw_metrics.txt".format(deployment_dir), "r") as file:
-        res = eval(file.read())
+        with open("{}/nw_metrics.txt".format(deployment_dir), "r") as file:
+            res = eval(file.read())
 
-    return res
+        return res
+
+    elif mode == "rtlsim":
+        model.set_metadata_prop("exec_mode", "rtlsim")
+        # generate random input tensor
+        i_name = model.graph.input[0].name
+        i_dt = model.get_tensor_datatype(i_name)
+        i_shape = model.get_tensor_shape(i_name)
+        # extend input shape with batchsize
+        i_shape.insert(0, batchsize)
+        i_tensor = gen_finn_dt_tensor(i_dt, i_shape)
+        inp_dict = {i_name: i_tensor}
+        rtlsim_exec(model, inp_dict, batchsize)
+        sim_cycles = model.get_metadata_prop("sim_cycles")
+        clk_ns = model.get_metadata_prop("clk_ns")
+        res = {}
+        runtime_ms = float(clk_ns) * 0.000001 * float(sim_cycles)
+        res["runtime[ms]"] = runtime_ms
+        res["throughput[images/s]"] = batchsize / (runtime_ms * 0.001)
+        return res
