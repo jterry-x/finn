@@ -41,7 +41,7 @@ except ModuleNotFoundError:
     PyVerilator = None
 
 
-def rtlsim_exec(model, execution_context):
+def rtlsim_exec(model, execution_context, batchsize=1):
     """Use PyVerilator to execute given model with stitched IP. The execution
     context contains the input values."""
 
@@ -67,7 +67,7 @@ def rtlsim_exec(model, execution_context):
     # convert input into time multiplexed shape
     i_folded_shape = first_node.get_folded_input_shape()
     # TODO any other layout transformations need to happen here!
-    i_tensor = i_tensor.reshape(i_folded_shape)
+    i_tensor = i_tensor.reshape(batchsize, i_folded_shape[1], i_folded_shape[2])
     # extract output shape
     o_name = model.graph.output[0].name
     o_shape = model.get_tensor_shape(o_name)
