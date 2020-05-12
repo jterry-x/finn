@@ -165,6 +165,8 @@ def test_end2end_tfc_w1a1_ip_stitch():
     model = ModelWrapper(build_dir + "/end2end_tfc_w1a1_ipgen.onnx")
     model = model.transform(ReplaceVerilogRelPaths())
     model = model.transform(CreateStitchedIP(test_fpga_part, target_clk_ns))
+    res = throughput_test(model, "rtlsim")
+    assert res is not None
     model.save(build_dir + "/end2end_tfc_w1a1_ipstitch.onnx")
 
 
@@ -188,7 +190,6 @@ def test_end2end_tfc_w1a1_verify_dataflow_part():
     ret_rtlsim_nodebynode = execute_onnx(model, inp_dict, True)
     res_rtlsim_nodebynode = ret_rtlsim_nodebynode[out_name]
     # whole-network (ip-stitched) rtlsim
-    model.set_metadata_prop("exec_mode", "rtlsim")
     model.save(build_dir + "/end2end_tfc_w1a1_ipstitch_whole_rtlsim.onnx")
     ret_rtlsim_whole = execute_onnx(model, inp_dict, True)
     res_rtlsim_whole = ret_rtlsim_whole[out_name]
@@ -300,7 +301,7 @@ def test_end2end_tfc_w1a1_run_on_pynq():
         y = ret[oname]
         assert np.isclose(y, y_golden).all()
         child_model = ModelWrapper(sdp_node.get_nodeattr("model"))
-        res = throughput_test(child_model)
+        res = throughput_test(child_model, "board")
         assert res is not None
 
     except KeyError:
