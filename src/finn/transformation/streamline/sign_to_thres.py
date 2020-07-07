@@ -45,12 +45,6 @@ class ConvertSignToThres(Transformation):
             if n.op_type == "Sign":
                 sign_in_name = n.input[0]
                 sign_out_name = n.output[0]
-                # find consumer
-                consumer = model.find_consumer(sign_out_name)
-                assert (
-                    consumer is not None
-                ), """There is no consumer of the
-                sign_out tensor."""
                 # create thresholds
                 thres_param_name = model.make_new_valueinfo_name()
                 thres_param = np.asarray([[0]], dtype=np.float32)
