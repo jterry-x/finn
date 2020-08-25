@@ -64,6 +64,7 @@ from finn.transformation.streamline.reorder import MakeMaxPoolNHWC
 from finn.transformation.infer_data_layouts import InferDataLayouts
 from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
 import warnings
+from finn.transformation.insert_topk import InsertTopK
 
 
 build_dir = "/tmp/" + os.environ["FINN_INST_NAME"]
@@ -92,6 +93,7 @@ def test_end2end_zynqbuild_cnv_w1a1_import_and_tidy():
     model = model.transform(GiveUniqueNodeNames())
     model = model.transform(GiveReadableTensorNames())
     model = model.transform(RemoveStaticGraphInputs())
+    model = model.transform(InsertTopK(k=1))
     model.save(build_dir + "/end2end_zynqbuild_cnv_w1a1_tidy.onnx")
 
 
@@ -105,6 +107,7 @@ def test_end2end_zynqbuild_cnv_w1a1_streamline():
     model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
     model = model.transform(ConvertBipolarMatMulToXnorPopcount())
     model = model.transform(Streamline())
+    model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
     model = model.transform(RemoveUnusedTensors())
     model.save(build_dir + "/end2end_zynqbuild_cnv_w1a1_streamlined.onnx")
 
@@ -117,6 +120,7 @@ def test_end2end_zynqbuild_cnv_w1a1_convert_to_hls_layers():
     model = model.transform(to_hls.InferQuantizedStreamingFCLayer(mem_mode))
     model = model.transform(to_hls.InferConvInpGen())
     model = model.transform(to_hls.InferStreamingMaxPool())
+    model = model.transform(to_hls.InferLabelSelectLayer())
     model = model.transform(GiveUniqueNodeNames())
     model = model.transform(RemoveCNVtoFCFlatten())
     model = model.transform(InferDataLayouts())
@@ -245,7 +249,6 @@ def test_end2end_zynqbuild_cnv_w1a1_run_on_pynq():
         ret = execute_onnx(parent_model, {iname: x}, True)
         y = ret[oname]
         assert np.isclose(y, y_golden).all()
-        assert np.argmax(y) == 3
 
     except KeyError:
         pytest.skip("PYNQ board IP address not specified")
