@@ -43,6 +43,7 @@ from finn.transformation.general import RemoveStaticGraphInputs
 from finn.transformation.infer_shapes import InferShapes
 from finn.util.basic import make_build_dir
 from finn.util.test import get_test_model_trained
+from finn.transformation.double_to_single_float import DoubleToSingleFloat
 
 export_onnx_path = make_build_dir("test_brevitas_fc_")
 
@@ -62,6 +63,7 @@ def test_brevitas_fc_onnx_export_and_exec(size, wbits, abits):
     fc = get_test_model_trained(size, wbits, abits)
     bo.export_finn_onnx(fc, (1, 1, 28, 28), finn_onnx)
     model = ModelWrapper(finn_onnx)
+    model = model.transform(DoubleToSingleFloat())
     model = model.transform(InferShapes())
     model = model.transform(FoldConstants())
     model = model.transform(RemoveStaticGraphInputs())
